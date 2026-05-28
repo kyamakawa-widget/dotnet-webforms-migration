@@ -40,6 +40,7 @@ public record MonthlyPayrollDto(
 public class AttendanceService
 {
     private readonly string _connectionString;
+    private static readonly DateOnly DemoStartDate = new(2025, 12, 1);
 
     public AttendanceService(IConfiguration config)
     {
@@ -151,6 +152,63 @@ public class AttendanceService
             sb.AppendLine($"{log.ClockIn:yyyy-MM-dd},{log.ClockIn:HH:mm:ss},{log.ClockOut:HH:mm:ss},{hours},{log.IsCorrected}");
         }
         return Encoding.UTF8.GetPreamble().Concat(Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+    }
+
+    public async Task ResetForDemoAsync()
+    {
+        var yesterday = DateOnly.FromDateTime(DateTime.Today.AddDays(-1));
+        var rng = new Random(42);
+
+        using var conn = new NpgsqlConnection(_connectionString);
+
+        // 1. 今日の打刻を削除
+        await conn.ExecuteAsync(
+            "DELETE FROM attendance_logs WHERE DATE(clock_in) = CURRENT_DATE");
+
+        // 2. 全社員を取得
+        var employees = await conn.QueryAsync<EmployeeRecord>(
+            "SELECT id, hourly_wage, round_unit_minutes FROM employees");
+
+        foreach (var emp in employees)
+        {
+            // 3. 既存の打刻日を取得
+            var existingDates = (await conn.QueryAsync<DateTime>(
+                "SELECT DATE(clock_in) FROM attendance_logs WHERE employee_id = @Id AND clock_in IS NOT NULL",
+                new { Id = emp.Id }))
+                .Select(DateOnly.FromDateTime)
+                .ToHashSet();
+
+            // 4. 欠損平日をバックフィル
+            var current = DemoStartDate;
+            while (current <= yesterday)
+            {
+                if (current.DayOfWeek is not DayOfWeek.Saturday and not DayOfWeek.Sunday
+                    && !existingDates.Contains(current))
+                {
+                    var (clockIn, clockOut) = GenerateWorkTime(current, emp.RoundUnitMinutes, rng);
+                    var corrected = rng.NextDouble() < 0.05;
+                    await conn.ExecuteAsync(
+                        @"INSERT INTO attendance_logs (employee_id, clock_in, clock_out, is_corrected)
+                          VALUES (@EmployeeId, @ClockIn, @ClockOut, @IsCorrected)
+                          ON CONFLICT DO NOTHING",
+                        new { EmployeeId = emp.Id, ClockIn = clockIn, ClockOut = clockOut, IsCorrected = corrected });
+                }
+                current = current.AddDays(1);
+            }
+        }
+    }
+
+    // --- private ---
+    private static (DateTime clockIn, DateTime clockOut) GenerateWorkTime(DateOnly date, int roundUnit, Random rng)
+    {
+        var r = rng.NextDouble();
+        int raw = r < 0.70 ? 480 + rng.Next(-10, 11)
+                : r < 0.90 ? 480 + rng.Next(60, 181)
+                :             rng.Next(360, 421);
+        var rounded  = (raw / roundUnit) * roundUnit;
+        var clockIn  = date.ToDateTime(TimeOnly.MinValue).AddHours(8).AddMinutes(30 + rng.Next(0, 61));
+        var clockOut = clockIn.AddMinutes(rounded);
+        return (clockIn, clockOut);
     }
 
     private async Task<IEnumerable<AttendanceLogDto>> GetMonthlyLogsAsync(string employeeId, int year, int month)

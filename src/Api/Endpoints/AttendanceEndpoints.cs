@@ -52,5 +52,11 @@ public static class AttendanceEndpoints
             var m = month ?? DateTime.Now.Month;
             return Results.Ok(await svc.CalcMonthlyPayrollAsync(employeeId, y, m));
         }).WithName("GetPayroll").WithTags("Attendances");
+
+        app.MapPost("/demo/reset", async (AttendanceService svc) =>
+        {
+            await svc.ResetForDemoAsync();
+            return Results.Ok(new { message = "デモリセット完了。昨日までバックフィル済み、今日分はクリア。" });
+        }).WithName("DemoReset").WithTags("Demo");
     }
 }

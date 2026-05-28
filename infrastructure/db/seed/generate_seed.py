@@ -2,20 +2,21 @@
 """
 02_seed.sql を生成するスクリプト。
 実行: python infrastructure/db/seed/generate_seed.py > infrastructure/db/seed/02_seed.sql
+DATE_TO は常に昨日。デモリセット時のバックフィル基準日と一致させる。
 """
 import random
 from datetime import datetime, timedelta
 
 # --- 設定 ---
-SEED      = 42
-DATE_FROM = datetime(2025, 12, 1)
-DATE_TO   = datetime(2026, 5, 31)
-CORRECT_RATE = 0.05  # 修正フラグ付与率
+SEED         = 42
+DATE_FROM    = datetime(2025, 12, 1)
+DATE_TO      = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0) - timedelta(days=1)
+CORRECT_RATE = 0.05
 
 random.seed(SEED)
 
 employees = [
-    ("EMP-001", 15),   # round_unit_minutes
+    ("EMP-001", 15),
     ("EMP-002", 30),
     ("EMP-003",  1),
 ]
@@ -23,26 +24,26 @@ employees = [
 def weekdays(date_from: datetime, date_to: datetime):
     d = date_from
     while d <= date_to:
-        if d.weekday() < 5:  # 月〜金
+        if d.weekday() < 5:
             yield d
         d += timedelta(days=1)
 
 def random_clock_in(base_date: datetime) -> datetime:
-    minutes = random.randint(0, 60)  # 8:30〜9:30
+    minutes = random.randint(0, 60)
     return base_date.replace(hour=8, minute=30) + timedelta(minutes=minutes)
 
 def worked_minutes(round_unit: int) -> int:
     r = random.random()
-    if r < 0.70:                        # 通常 8h
+    if r < 0.70:
         raw = 480 + random.randint(-10, 10)
-    elif r < 0.90:                      # 残業 9〜11h
+    elif r < 0.90:
         raw = 480 + random.randint(60, 180)
-    else:                               # 短時間 6〜7h
+    else:
         raw = random.randint(360, 420)
-    # round_unit で切り捨て
     return (raw // round_unit) * round_unit
 
 print("-- 勤怠サンプルデータ")
+print(f"-- 生成期間: {DATE_FROM.strftime('%Y-%m-%d')} 〜 {DATE_TO.strftime('%Y-%m-%d')}")
 print()
 
 total = 0
