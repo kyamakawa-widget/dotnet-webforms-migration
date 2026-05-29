@@ -11,7 +11,7 @@ echo "==> [1/3] ディレクトリ作成"
 mkdir -p "$APP_DIR/wwwroot"
 
 echo "==> [2/3] systemd ユニット登録"
-sudo tee /etc/systemd/system/${SERVICE}.service > /dev/null <<EOF
+sudo tee /etc/systemd/system/${SERVICE}.service > /dev/null <<UNIT
 [Unit]
 Description=WebForms Migration App (.NET 8)
 After=network.target
@@ -20,12 +20,13 @@ After=network.target
 User=${USER}
 WorkingDirectory=${APP_DIR}
 ExecStart=${APP_DIR}/AttendanceApi
+Environment="ASPNETCORE_URLS=http://+:5153"
 Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-EOF
+UNIT
 
 echo "==> [3/3] サービス有効化"
 sudo systemctl daemon-reload
