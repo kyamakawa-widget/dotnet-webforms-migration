@@ -1,6 +1,5 @@
 #!/usr/bin/env bash
 set -euo pipefail
-
 VPS="widget-vps"
 VPS_APP_DIR="/home/k_yamakawa/ops/webforms-migration"
 PUBLISH_DIR="./publish/api"
@@ -29,10 +28,15 @@ rsync -az --delete \
   src/Web/dist/ \
   "$VPS:$VPS_APP_DIR/wwwroot/"
 
-echo "==> done"
 echo ""
-echo "=========================================="
-echo " サービス再起動は VPS 上で手動実行:"
-echo "   sudo systemctl restart webforms-migration.service"
-echo "   systemctl is-active webforms-migration.service"
-echo "=========================================="
+echo "==> restart"
+ssh -o ClearAllForwardings=yes "$VPS" "
+  if systemctl is-active --quiet webforms-migration.service; then
+    sudo systemctl restart webforms-migration.service
+    echo '  webforms-migration.service: restarted'
+  else
+    echo '  webforms-migration.service: inactive - skipped'
+  fi
+"
+
+echo "==> done"
